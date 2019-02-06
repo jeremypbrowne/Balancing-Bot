@@ -3,6 +3,8 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <Adafruit_MotorShield.h>
+#include <LiquidCrystal.h>
+
 
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
@@ -20,6 +22,7 @@ Adafruit_DCMotor *myMotor1 = AFMS.getMotor(1);
 // You can also make another motor on port M2
 Adafruit_DCMotor *myMotor2 = AFMS.getMotor(4);
 
+//LiquidCrystal lcd(5, 8, 9, 10, 11 , 12);
 
 MPU6050 mpu;
 
@@ -37,18 +40,18 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 //PID
-double originalSetpoint = 175.8;
+double originalSetpoint = 178.9;
 double setpoint = originalSetpoint;
 double movingAngleOffset = 0.1;
 double input, output;
 int moveState=0; //0 = balance; 1 = back; 2 = forth
-double Kp = 50;
+double Kp = 90;
 double Kd = 1.4;
-double Ki = 60;
+double Ki = 81;
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
-double motorSpeedFactorLeft = 0.6;
-double motorSpeedFactorRight = 0.5;
+double motorSpeedFactorLeft = 0.7;
+double motorSpeedFactorRight = 0.8;
 int _currentSpeed;
 int Direction = 1;
 //MOTOR CONTROLLER
@@ -151,21 +154,50 @@ void setup()
         Serial.print(devStatus);
         Serial.println(F(")"));
     }
+
+//  lcd.begin(16, 2);
+//  
+//  lcd.setCursor(0,0);
+//  lcd.write("P:");
+//  lcd.setCursor(7,0);
+//  lcd.write("I:");  
+//  lcd.setCursor(0,1);
+//  lcd.write("D:"); 
+
+
+    
 }
+
+/*****************************************************************
+ * 
+ * 
+ * 
+ ****************************************************************/
 
 
 void loop()
 {
-//    uint8_t i;
-//    myMotor1->run(FORWARD);
-//    for (i=0; i<255; i++) {
-//      myMotor1->setSpeed(i);  
-//      delay(10);
-//    }
-//    for (i=255; i!=0; i--) {
-//     myMotor1->setSpeed(i);  
-//     delay(10);
-//    }
+  static float sensorValue1 = 0;        // value read from the pot
+  static float sensorValue2 = 0;        // value read from the pot
+  static float sensorValue3 = 0;        // value read from the pot
+//
+//  // read the analog in value:
+//  sensorValue1 = analogRead(A0);
+//  sensorValue2 = analogRead(A1);
+//  sensorValue3 = analogRead(A2);
+//
+//    // map it to the range of the analog out:
+//  Kp = map(sensorValue1, 0, 1023, 0.00, 255.00);
+//  Ki = map(sensorValue2, 0, 1023, 0.00, 255.00);
+//  Kd = map(sensorValue3, 0, 1023, 0.00, 255);
+//
+//  lcd.setCursor(3,0);
+//  lcd.print(Kp);
+//  lcd.setCursor(10,0);
+//  lcd.print(Ki);  /.
+//  lcd.setCursor(3,1);
+//  lcd.print(Kd);   
+
  
     // if programming failed, don't try to do anything
     if (!dmpReady) return;
@@ -255,4 +287,6 @@ void loop()
         //#endif
         input = ypr[1] * 180/M_PI + 180;
    }
+
+   
 }
