@@ -6,10 +6,23 @@
 #include <LiquidCrystal.h>
 
 
+
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
 #endif
 
+//button states
+#define ButtonState_Up      1
+#define ButtonState_Pressed 2 
+#define ButtonState_Down    3
+#define ButtonState_Released 4
+
+//map button high/low to up/down
+#define ButtonRead_Up 1
+#define ButtonRead_Down 2
+
+
+#define buttonPin 6
 #define MIN_ABS_SPEED 20
 
 // Create the motor shield object with the default I2C address
@@ -21,8 +34,8 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *myMotor1 = AFMS.getMotor(1);
 // You can also make another motor on port M2
 Adafruit_DCMotor *myMotor2 = AFMS.getMotor(4);
-
-//LiquidCrystal lcd(5, 8, 9, 10, 11 , 12);
+const int rs = 7, en = 8, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 MPU6050 mpu;
 
@@ -40,7 +53,7 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 //PID
-double originalSetpoint = 178.9;
+double originalSetpoint = 181.5;
 double setpoint = originalSetpoint;
 double movingAngleOffset = 0.1;
 double input, output;
@@ -50,18 +63,10 @@ double Kd = 1.4;
 double Ki = 81;
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
-double motorSpeedFactorLeft = 0.7;
-double motorSpeedFactorRight = 0.8;
+double motorSpeedFactorLeft = 0.9;
+double motorSpeedFactorRight = 1;
 int _currentSpeed;
 int Direction = 1;
-//MOTOR CONTROLLER
-int ENA = 5;
-int IN1 = 6;
-int IN2 = 7;
-int IN3 = 8;
-int IN4 = 9;
-int ENB = 10;
-LMotorController motorController(ENA, IN1, IN2, ENB, IN3, IN4, motorSpeedFactorLeft, motorSpeedFactorRight);
 
 //timers
 long time1Hz = 0;
@@ -76,6 +81,9 @@ void dmpDataReady()
 
 void setup()
 {
+   
+    pinMode(buttonPin, INPUT);
+    
     // join I2C bus (I2Cdev library doesn't do this automatically)
     #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
         Wire.begin();
@@ -83,17 +91,12 @@ void setup()
     #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
         Fastwire::setup(400, true);
     #endif
-
-    // initialize serial communication
-    // (115200 chosen because it is required for Teapot Demo output, but it's
-    // really up to you depending on your project)
     Serial.begin(115200);
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
     
     Serial.println("Adafruit Motorshield v2 - DC Motor test!");
 
     AFMS.begin();  // create with the default frequency 1.6KHz
-    //AFMS.begin(1000);  // OR with a different frequency, say 1KHz
 
     // Set the speed to start, from 0 (off) to 255 (max speed)
     myMotor1->setSpeed(150);
@@ -155,17 +158,17 @@ void setup()
         Serial.println(F(")"));
     }
 
-//  lcd.begin(16, 2);
-//  
-//  lcd.setCursor(0,0);
-//  lcd.write("P:");
-//  lcd.setCursor(7,0);
-//  lcd.write("I:");  
-//  lcd.setCursor(0,1);
-//  lcd.write("D:"); 
+  lcd.begin(16, 2);
+  lcd.setCursor(0,0);
+  lcd.write("P:");
+  lcd.setCursor(7,0);
+  lcd.write("I:");  
+  lcd.setCursor(0,1);
+  lcd.write("D:"); 
+  lcd.setCursor(7,1);
+  lcd.write("A:"); 
 
-
-    
+  updateLCD();
 }
 
 /*****************************************************************
@@ -175,30 +178,46 @@ void setup()
  ****************************************************************/
 
 
+int UpdateButtonState(int iButtonState, int iNewButtonRead)
+{
+  if(iButtonState == ButtonState_Up && iNewButtonRead == ButtonRead_Down)
+    return ButtonState_Pressed;
+  else if(iButtonState == ButtonState_Pressed)
+    return ButtonState_Down;
+  else if(iButtonState == ButtonState_Down && iNewButtonRead == ButtonRead_Up)
+    return ButtonState_Released;
+  else if(iButtonState == ButtonState_Released)
+    return ButtonState_Up;
+    
+  return iButtonState;
+}
+
+int checkButton(int iButtonPin)
+{
+  int newButtonRead = digitalRead(iButtonPin);
+  delay(1);
+  int debounceButtonRead = digitalRead(iButtonPin);
+  if(newButtonRead != debounceButtonRead)
+    return -1;//button is not stable
+
+  if(newButtonRead == LOW) //Button is active low, ie using pullup
+    return ButtonRead_Down;
+  return ButtonRead_Up;
+}
+
 void loop()
 {
-  static float sensorValue1 = 0;        // value read from the pot
-  static float sensorValue2 = 0;        // value read from the pot
-  static float sensorValue3 = 0;        // value read from the pot
-//
-//  // read the analog in value:
-//  sensorValue1 = analogRead(A0);
-//  sensorValue2 = analogRead(A1);
-//  sensorValue3 = analogRead(A2);
-//
-//    // map it to the range of the analog out:
-//  Kp = map(sensorValue1, 0, 1023, 0.00, 255.00);
-//  Ki = map(sensorValue2, 0, 1023, 0.00, 255.00);
-//  Kd = map(sensorValue3, 0, 1023, 0.00, 255);
-//
-//  lcd.setCursor(3,0);
-//  lcd.print(Kp);
-//  lcd.setCursor(10,0);
-//  lcd.print(Ki);  /.
-//  lcd.setCursor(3,1);
-//  lcd.print(Kd);   
 
- 
+  static int ButtonState = ButtonState_Up;
+//  ButtonState = UpdateButtonState(ButtonState, checkButton(buttonPin));
+//  if (ButtonState == ButtonState_Pressed)
+//  {
+//      myMotor1->setSpeed(0);
+//      myMotor2->setSpeed(0);
+//      Serial.println("pressed");
+//      updateLCD();
+//  }
+
     // if programming failed, don't try to do anything
     if (!dmpReady) return;
 
@@ -231,14 +250,6 @@ void loop()
         if (output == _currentSpeed) return;
     
         int realSpeed = max(MIN_ABS_SPEED, abs(output));
-    
-//        digitalWrite(_in1, output > 0 ? HIGH : LOW);
-//        digitalWrite(_in2,output > 0 ? LOW : HIGH);
-//        digitalWrite(_in3, output > 0 ? HIGH : LOW);
-//        digitalWrite(_in4, output > 0 ? LOW : HIGH);
-//        analogWrite(_ena, realSpeed * _motorAConst);
-//        analogWrite(_enb, realSpeed * _motorBConst);
-
         myMotor1->setSpeed(realSpeed * motorSpeedFactorLeft);
         myMotor2->setSpeed(realSpeed * motorSpeedFactorRight);
         
@@ -253,6 +264,7 @@ void loop()
     // get current FIFO count
     fifoCount = mpu.getFIFOCount();
 
+    
     // check for overflow (this should never happen unless our code is too inefficient)
     if ((mpuIntStatus & 0x10) || fifoCount == 1024)
     {
@@ -283,10 +295,84 @@ void loop()
             Serial.print("\t");
             Serial.print(ypr[1] * 180/M_PI);
             Serial.print("\t");
-            Serial.println(ypr[2] * 180/M_PI);
+            Serial.print(ypr[2] * 180/M_PI);
+            Serial.print("\t");
+            Serial.print("out: ");
+            Serial.print("\t");
+            Serial.print(output);
+            Serial.print("count: ");
+            Serial.print("\t");
+            Serial.println(fifoCount);            
+//            lcd.setCursor(9,1);
+//            lcd.print(ypr[1] * 180/M_PI,0); 
         //#endif
         input = ypr[1] * 180/M_PI + 180;
    }
 
-   
+}
+
+double updateLCD()
+{
+
+  int cycle = 0;
+  static int ButtonState = ButtonState_Up;
+  static float sensorValue1 = 0;        // value read from the pot
+  static float sensorValue2 = 0;        // value read from the pot
+  static float sensorValue3 = 0;        // value read from the pot
+
+
+// read the analogIn value:
+ while(cycle < 4)  { 
+    ButtonState = UpdateButtonState(ButtonState, checkButton(buttonPin));
+    if(ButtonState == ButtonState_Pressed){
+        cycle = 1;
+    }
+  while(cycle == 1){
+    sensorValue1 = analogRead(A0);
+    Kp = map(sensorValue1, 0, 1023, 0.00, 255);
+    Serial.print(cycle);
+     Serial.print("\t");
+     Serial.println(Kp);
+    lcd.setCursor(3,0);
+    lcd.print(Kp,0);
+    delay(10);
+    ButtonState = UpdateButtonState(ButtonState, checkButton(buttonPin));
+    if(ButtonState == ButtonState_Pressed){
+        cycle = 2;
+    }
+  }
+  while(cycle == 2){
+    sensorValue2 = analogRead(A0);
+    Ki = map(sensorValue2, 0, 1023, 0.00, 255);
+     Serial.print(cycle);
+     Serial.print("\t");
+     Serial.print(Kp);
+     Serial.print("\t");
+     Serial.println(ButtonState);
+    lcd.setCursor(10,0);
+    lcd.print(Ki,0);  
+    delay(10);
+    ButtonState = UpdateButtonState(ButtonState, checkButton(buttonPin));
+    if(ButtonState == ButtonState_Pressed){
+        cycle = 3;
+    }
+  }
+  while(cycle == 3){
+    sensorValue3 = analogRead(A0);
+    Kd = map(sensorValue3, 0, 1023, 0.00, 255);
+    Serial.print(cycle);
+     Serial.print("\t");
+     Serial.println(Kp);
+    lcd.setCursor(3,1);
+    lcd.print(Kd,0); 
+    delay(10);
+    ButtonState = UpdateButtonState(ButtonState, checkButton(buttonPin));
+    if(ButtonState == ButtonState_Pressed){
+        cycle = 4;
+    }
+  }
+  delay(10);
+}
+// map it to the range of the analog out:
+
 }
