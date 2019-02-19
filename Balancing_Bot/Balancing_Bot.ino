@@ -53,7 +53,7 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 //PID
-double originalSetpoint = 181.5;
+double originalSetpoint = 180;
 double setpoint = originalSetpoint;
 double movingAngleOffset = 0.1;
 double input, output;
